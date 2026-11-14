@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trust Fall · APM Lab</title>
+<meta name="description" content="Which auto-fix categories from an ops agent have earned a skip-the-queue lane? A Bayesian Beta-Binomial Monte Carlo prototype by Shriya Shekatkar.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Gloria+Hallelujah&family=Permanent+Marker&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* hero: sun pin */
+  --sun-core:#FFD45C; --sun-mid:#F2B01E; --sun-edge:#B57406; --sun-deep:#6E4204; --sun-ink:#2B1700; --sun-cream:#FFF1C7;
+  /* cards: crow sketch pin */
+  --paper:#D9D6CF; --paper-2:#CBC8C0; --ink:#151515; --pencil:#4A4844;
+  /* badges: princess poster pin */
+  --pink:#C8338F; --pink-hot:#E04FAE; --butter:#FFF6B0;
+  /* sim room: green-ink pin */
+  --neon:#39E11E; --neon-deep:#1C7A0B; --white:#FFFFFF;
+  --body:#1B1B1B; --muted:#55524C;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#EFEDE8;color:var(--body);font-family:"DM Sans",system-ui,sans-serif;font-size:17px;line-height:1.55;overflow-x:hidden}
+a{color:inherit}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+h2{font-family:"Anton",Impact,sans-serif;font-weight:400;letter-spacing:.01em;font-size:clamp(34px,5vw,56px);line-height:1;margin:0 0 18px;text-transform:uppercase}
+section{padding:64px 0}
+/* grain overlay */
+.grain{position:relative;isolation:isolate}
+.grain::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;opacity:.22;mix-blend-mode:multiply;
+ background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+.grain>*{position:relative;z-index:2}
+
+/* ---------- HERO (sun pin) ---------- */
+.hero{background:radial-gradient(circle at 50% 46%,var(--sun-core) 0 14%,var(--sun-mid) 32%,var(--sun-edge) 62%,var(--sun-deep) 100%);min-height:640px;display:flex;align-items:center;overflow:hidden;color:var(--sun-ink)}
+.hero svg.rays{position:absolute;left:50%;top:46%;width:1500px;height:1500px;transform:translate(-50%,-50%);z-index:0;animation:spin 140s linear infinite}
+@keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.hero .wrap{text-align:center;padding-top:80px;padding-bottom:80px}
+.eyebrow{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;background:var(--sun-ink);color:var(--sun-cream);padding:6px 12px;border-radius:999px}
+.hero h1{font-family:"DM Sans",sans-serif;font-weight:700;text-transform:lowercase;font-size:clamp(40px,7.4vw,92px);line-height:.98;letter-spacing:-.03em;margin:22px auto 18px;max-width:900px;color:var(--sun-ink);text-shadow:0 0 40px rgba(255,241,199,.7)}
+.hero p.sub{max-width:660px;margin:0 auto 22px;font-size:19px;color:var(--sun-ink);font-weight:500}
+.hero .launch{display:inline-block;background:var(--sun-cream);color:var(--sun-ink);padding:10px 16px;border-radius:14px;font-size:15px;border:2px solid var(--sun-ink);max-width:100%}
+.hero .who{margin-top:22px;font-family:"JetBrains Mono",monospace;font-size:13px;letter-spacing:.08em;color:var(--sun-ink)}
+
+/* ---------- CARDS (crow sketch pin) ---------- */
+.paper{background:var(--paper)}
+.masonry{columns:3 300px;column-gap:22px}
+.card{break-inside:avoid;margin:0 0 22px;background:#E4E1DA;border:2px solid var(--ink);border-radius:6px 10px 7px 12px;padding:22px 20px 18px;position:relative;box-shadow:4px 5px 0 var(--ink)}
+.card::before{content:"";position:absolute;inset:5px -4px -3px 4px;border:1.5px solid var(--pencil);border-radius:9px 5px 12px 6px;pointer-events:none;opacity:.55}
+.bubble{display:inline-block;font-family:"Gloria Hallelujah",cursive;font-size:17px;background:#F1EFEA;border:2px solid var(--ink);border-radius:30px 34px 28px 32px;padding:2px 16px;margin:-6px 0 10px;position:relative}
+.bubble::after{content:"";position:absolute;left:18px;bottom:-12px;width:9px;height:9px;border:2px solid var(--ink);border-radius:50%;background:#F1EFEA}
+.card h3{font-family:"DM Sans";font-size:20px;margin:6px 0 6px}
+.card p,.card li{font-size:16px;margin:6px 0}
+.card ul{padding-left:20px;margin:6px 0}
+.pin-cap{font-family:"Gloria Hallelujah",cursive;font-size:14px;color:var(--pencil);margin-top:10px}
+table.guard{width:100%;border-collapse:collapse;font-size:15px}
+table.guard td{border-top:1.5px dashed var(--pencil);padding:7px 4px;vertical-align:top}
+table.guard td:last-child{font-family:"JetBrains Mono",monospace;white-space:nowrap;text-align:right}
+.btn{font-family:"Gloria Hallelujah",cursive;font-size:17px;background:#F1EFEA;color:var(--ink);border:2px solid var(--ink);border-radius:18px 22px 16px 24px;padding:6px 18px;cursor:pointer;box-shadow:3px 3px 0 var(--ink);transition:transform .12s}
+.btn:hover{transform:translate(-1px,-1px) rotate(-1deg)}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.btn:focus-visible,input:focus-visible{outline:3px solid var(--neon-deep);outline-offset:3px}
+
+/* ---------- SIM ROOM (green ink pin) ---------- */
+.sim{background:var(--white)}
+.marker{font-family:"Permanent Marker",cursive;color:var(--neon);-webkit-text-stroke:1.6px #000;paint-order:stroke fill;text-transform:uppercase;font-size:clamp(34px,6vw,64px);line-height:1.02;letter-spacing:.03em;margin:0 0 10px;text-shadow:2px 2px 0 #000}
+.sim .lede{max-width:760px;color:#222}
+.sim-grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:26px;margin-top:22px}
+.controls{border:3px solid #000;border-radius:14px 8px 16px 10px;padding:18px;background:#F7FFF4}
+.ctl{margin:0 0 16px}
+.ctl label{display:flex;justify-content:space-between;font-weight:700;font-size:15px;gap:8px}
+.ctl label output{font-family:"JetBrains Mono",monospace;background:#000;color:var(--neon);padding:0 7px;border-radius:5px;font-size:13px;align-self:center}
+.ctl small{display:block;color:#444;font-size:13px;line-height:1.35}
+input[type=range]{width:100%;accent-color:var(--neon-deep);margin:6px 0 2px}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap}
+.canvas-box{border:3px solid #000;border-radius:10px 16px 8px 14px;background:#fff;padding:8px;min-width:0}
+canvas{display:block;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:13px;margin:6px 4px 2px;color:#222}
+.legend i{display:inline-block;width:12px;height:12px;border:2px solid #000;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.cat-table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
+.cat-table th,.cat-table td{border-bottom:2px solid #000;padding:6px 6px;text-align:right}
+.cat-table th:first-child,.cat-table td:first-child{text-align:left}
+.cat-table th{font-family:"Permanent Marker";font-weight:400;font-size:14px;letter-spacing:.04em}
+.tag{display:inline-block;font-family:"JetBrains Mono";font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;border:2px solid #000}
+.tag.go{background:var(--neon);color:#000}
+.tag.wait{background:#fff;color:#000}
+.table-scroll{overflow-x:auto}
+
+/* ---------- KPI badges (princess poster pin) ---------- */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:26px 0 0}
+.kpi{background:var(--pink);color:var(--butter);padding:16px 16px 14px;border-radius:4px;position:relative;overflow:hidden}
+.kpi .v{font-family:"Anton",Impact,sans-serif;font-size:clamp(34px,4.4vw,52px);line-height:1;letter-spacing:-.01em;display:block}
+.kpi .l{font-family:"Anton",Impact,sans-serif;text-transform:uppercase;font-size:16px;letter-spacing:.04em;line-height:1.1;display:block;margin-top:6px}
+.kpi .star{position:absolute;right:10px;top:8px;width:26px;height:26px;fill:var(--butter);opacity:.9}
+.kpi.pop{animation:pop .45s ease}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.05) rotate(-1deg)}100%{transform:scale(1)}}
+
+/* ---------- MEMO ---------- */
+.memo{background:var(--paper-2)}
+.memo .sheet{background:#F1EFEA;border:2px solid var(--ink);box-shadow:6px 6px 0 var(--ink);border-radius:8px 4px 10px 6px;padding:28px clamp(18px,4vw,40px);max-width:860px}
+.memo dl{margin:0}
+.memo dt{font-family:"Gloria Hallelujah",cursive;font-size:18px;margin-top:14px}
+.memo dd{margin:2px 0 0;font-size:17px}
+.vp{margin-top:22px;background:var(--pink);color:var(--butter);padding:16px 18px;font-family:"Anton";font-size:clamp(20px,2.6vw,26px);line-height:1.2;letter-spacing:.01em;border-radius:4px}
+.vp b{font-family:"JetBrains Mono";font-size:12px;letter-spacing:.12em;display:block;margin-bottom:6px;font-weight:600}
+
+/* ---------- MATH ---------- */
+.math{background:#F6E7B8}
+.math .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px}
+.formula{font-family:"JetBrains Mono",monospace;font-size:15px;background:var(--sun-ink);color:var(--sun-cream);padding:12px 14px;border-radius:10px;overflow-x:auto;white-space:pre}
+/* ---------- CODE ---------- */
+.code{background:#141414;color:#EDEDED}
+.code h2{color:var(--neon)}
+pre{background:#000;border:2px solid var(--neon);border-radius:10px;padding:16px;overflow-x:auto;font-family:"JetBrains Mono",monospace;font-size:13.5px;line-height:1.5;color:#E8FFE2;margin:0 0 20px}
+.code p{color:#D8D8D8;max-width:760px}
+.code .k{color:var(--neon)}
+.code .c{color:#9C9C9C}
+/* ---------- FOOTER ---------- */
+footer{background:var(--sun-ink);color:var(--sun-cream);padding:34px 0 40px;font-size:15px}
+footer a{color:var(--sun-core)}
+footer .credits{font-size:11px;color:#CDBB8F;margin-top:12px;line-height:1.6}
+footer .credits a{color:#E8D8AE}
+
+@media (max-width:860px){
+  .sim-grid{grid-template-columns:minmax(0,1fr)}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .math .two{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:420px){
+  body{font-size:16px}
+  .wrap{padding:0 16px}
+  .hero{min-height:560px}
+  .kpi .l{font-size:14px}
+  section{padding:48px 0}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<header class="hero grain">
+  <svg class="rays" viewBox="-750 -750 1500 1500" aria-hidden="true" id="rays"></svg>
+  <div class="wrap">
+    <span class="eyebrow">APM Lab · decision prototype</span>
+    <h1>trust is earned one clean fix at a time.</h1>
+    <p class="sub">An ops agent that proposes fixes is only as useful as the queue it lands in. Which fix types have earned the right to skip it?</p>
+    <a class="launch" href="https://docs.databricks.com/aws/en/zeroops/" target="_blank" rel="noopener">Mirrors: Genie ZeroOps enters Beta (Databricks release notes, Nov 12 2026) ↗</a>
+    <div class="who">SHRIYA SHEKATKAR · UCLA · STATS 102C MONTE CARLO METHODS</div>
+  </div>
+</header>
+
+<!-- DECISION -->
+<section class="paper grain" id="decision">
+  <div class="wrap">
+    <h2>The decision</h2>
+    <div class="masonry">
+      <div class="card">
+        <span class="bubble">the customer.</span>
+        <h3>Customer problem</h3>
+        <p>A data platform team running hundreds of jobs gets a background agent that finds the broken pipeline, names the root cause, and drafts the fix. Then the fix waits for a human. At 2am, the waiting is the outage.</p>
+        <p>Many of these fixes are boring: a retry after an upstream blip, a new nullable column from schema drift. Reviewers approve them in seconds, but only after they wake up.</p>
+        <div class="pin-cap">↳ “treasure” = a fix nobody had to read.</div>
+      </div>
+      <div class="card">
+        <span class="bubble">the change.</span>
+        <h3>Proposed change</h3>
+        <p>An <b>opt-in, admin-controlled “earned lane”</b>: a fix category that has proven itself in human-reviewed history may open, sandbox-test and merge its own pull request, with one-click revert and a notification. Everything else stays in today's review queue.</p>
+        <p>A category graduates only when the posterior says <b>P(success rate ≥ bar) ≥ confidence</b>. It's demoted when the evidence slips.</p>
+      </div>
+      <div class="card">
+        <span class="bubble">north star.</span>
+        <h3>Success metric</h3>
+        <p><b>Median time-to-recovery</b> for broken jobs and pipelines in opted-in workspaces, target −40% versus the review-only control in 8 weeks.</p>
+        <p>Secondary: reviewer hours saved per workspace per week.</p>
+      </div>
+      <div class="card">
+        <span class="bubble">guardrails.</span>
+        <h3>Guardrails (any breach pauses the lane)</h3>
+        <table class="guard">
+          <tr><td>Bad auto-merged fixes (reverted or re-broke within 24h)</td><td>≤ 2%</td></tr>
+          <tr><td>Time from bad fix to revert, p90</td><td>≤ 15 min</td></tr>
+          <tr><td>Fixes that rewrite production data rows</td><td>0 (excluded)</td></tr>
+          <tr><td>Admins turning the lane off within 30 days</td><td>&lt; 10%</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <span class="bubble">who's in the room.</span>
+        <h3>Stakeholders</h3>
+        <ul>
+          <li>Platform / data engineering leads (the reviewers, the 2am pages)</li>
+          <li>Workspace admins and security (who owns an agent's merge rights)</li>
+          <li>Ops-agent eng + applied AI (fix generation, sandbox tests)</li>
+          <li>Governance PM (permissions, audit trail)</li>
+          <li>Support and field engineering (who hears about the bad fix first)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="bubble">what's true today.</span>
+        <h3>Grounding</h3>
+        <p>Per the public docs, the agent today proposes fixes and never changes production data or code without human review. This prototype asks a narrower, hypothetical question: if we ever relaxed that, <i>where</i> would the evidence support it, and where never.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SIMULATION -->
+<section class="sim" id="sim">
+  <div class="wrap">
+    <p class="marker">Has it earned it?</p>
+    <p class="lede">Four fix categories, each with a history of human-reviewed fixes (synthetic). For each one we draw thousands of plausible true success rates from its Bayesian posterior and ask how many clear your bar. Move the sliders; the memo below rewrites itself.</p>
+    <div class="sim-grid">
+      <div class="controls" aria-label="Simulation controls">
+        <div class="ctl"><label for="bar">Quality bar <output id="barO"></output></label><input type="range" id="bar" min="90" max="99.5" step="0.5" value="97"><small>True success rate a category must beat.</small></div>
+        <div class="ctl"><label for="conf">Confidence required <output id="confO"></output></label><input type="range" id="conf" min="70" max="99" step="1" value="90"><small>Posterior probability of beating the bar.</small></div>
+        <div class="ctl"><label for="prior">Prior strength <output id="priorO"></output></label><input type="range" id="prior" min="0" max="400" step="10" value="60"><small>Pseudo-fixes borrowed from the pooled rate across all categories. 0 = flat prior.</small></div>
+        <div class="ctl"><label for="hist">History used <output id="histO"></output></label><input type="range" id="hist" min="10" max="100" step="5" value="100"><small>Share of the 12-week review log we trust (scale it down to see early-Beta uncertainty).</small></div>
+        <div class="ctl"><label for="cost">Hours lost per bad auto-fix <output id="costO"></output></label><input type="range" id="cost" min="2" max="24" step="1" value="8"><small>Incident + revert + trust repair. Saved per good fix: 0.6 h.</small></div>
+        <div class="btnrow">
+          <button class="btn" id="run">Draw again</button>
+          <button class="btn" id="seed">New seed</button>
+        </div>
+        <p style="font-family:'JetBrains Mono';font-size:12px;margin:12px 0 0">seed <span id="seedO"></span> · 4,000 draws / category</p>
+      </div>
+      <div class="canvas-box">
+        <canvas id="cv" width="760" height="420" role="img" aria-label="Posterior samples of each fix category's success rate, with the quality bar as a vertical line"></canvas>
+        <div class="legend" id="legend"></div>
+        <div class="table-scroll">
+        <table class="cat-table" id="tbl"><thead><tr><th>Category</th><th>Clean / reviewed</th><th>Posterior mean</th><th>90% credible</th><th>P(≥ bar)</th><th>Lane</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+    <div class="kpis" aria-live="polite">
+      <div class="kpi" id="k1"><svg class="star" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7.1L12 17.3 5.8 21l1.6-7.1L2 9.2l7.1-.6z"/></svg><span class="v" id="kv1">–</span><span class="l">categories graduate</span></div>
+      <div class="kpi" id="k2"><svg class="star" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7.1L12 17.3 5.8 21l1.6-7.1L2 9.2l7.1-.6z"/></svg><span class="v" id="kv2">–</span><span class="l">net reviewer hours / wk (per 100 workspaces)</span></div>
+      <div class="kpi" id="k3"><svg class="star" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7.1L12 17.3 5.8 21l1.6-7.1L2 9.2l7.1-.6z"/></svg><span class="v" id="kv3">–</span><span class="l">bad auto-fixes / month</span></div>
+      <div class="kpi" id="k4"><svg class="star" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7.1L12 17.3 5.8 21l1.6-7.1L2 9.2l7.1-.6z"/></svg><span class="v" id="kv4">–</span><span class="l">chance the lane loses hours</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- MEMO -->
+<section class="memo grain" id="memo">
+  <div class="wrap">
+    <h2>Director memo</h2>
+    <div class="sheet">
+      <dl>
+        <dt>decision.</dt><dd id="mDecision"></dd>
+        <dt>evidence.</dt><dd id="mEvidence"></dd>
+        <dt>risks.</dt><dd id="mRisks"></dd>
+        <dt>rollout plan.</dt><dd id="mPlan"></dd>
+        <dt>next step.</dt><dd id="mNext"></dd>
+      </dl>
+      <div class="vp"><b>WHAT I'D TELL THE VP IN ONE SENTENCE</b><span id="mVP"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- MATH -->
+<section class="math grain" id="math">
+  <div class="wrap">
+    <h2>The math, from my Monte Carlo course</h2>
+    <div class="two">
+      <div>
+        <p><b>Frequentist vs Bayesian.</b> A frequentist would say each fix category has one fixed success rate and report its sample proportion (the MLE), maybe with a confidence interval. A Bayesian treats the unknown rate as something we have beliefs about, and updates those beliefs as reviewed fixes come in. For a launch gate, the Bayesian question is the useful one: <i>given what we've seen, how likely is it that this category is actually good enough?</i></p>
+        <p><b>Beta prior + Binomial data = Beta posterior.</b> If my belief about a rate is Beta(a, b) and I then watch n fixes with k clean ones, my updated belief is Beta(a + k, b + n − k). No integrals needed; the counts just add on. That's conjugacy.</p>
+        <p><b>Posterior mean is a weighted average.</b> The prior here is centered on the pooled rate across all categories. A small category gets pulled toward that pooled rate; a big one mostly speaks for itself. That shrinkage is what keeps a lucky 20-for-20 category from graduating on day three. Set prior strength to 0 and the prior is flat, so the posterior peak (MAP) equals the plain sample rate (MLE).</p>
+      </div>
+      <div>
+        <div class="formula">posterior  = Beta(a + k, b + n − k)
+mean       = w·(prior mean) + (1−w)·(k/n)
+             w = (a+b)/(a+b+n)
+P(p ≥ bar) ≈ (1/M) Σ 1{ p⁽ᵐ⁾ ≥ bar }</div>
+        <p><b>Where Monte Carlo comes in.</b> Instead of computing the Beta tail exactly, I draw M = 4,000 samples from each posterior and count the fraction above the bar. Each draw is built from two Gamma draws (Beta = X / (X + Y)), and those use normal draws, so it's sampling stacked on sampling. The same draws give the 90% credible interval (5th and 95th percentile of the samples) and the distribution of net hours saved, which is the number a VP actually cares about.</p>
+        <p><b>Credible vs confidence.</b> “There's a 93% chance this category's true rate is above 97%” is a credible-interval statement about this parameter, given this data. A confidence interval only promises coverage over repeated experiments, before you see the data. Execs hear the first one correctly.</p>
+        <p><b>Break-even bar.</b> With 0.6 h saved per good fix and C hours lost per bad one, auto-merge pays off only if p &gt; C / (C + 0.6). At C = 8 that's about 93%, which is why the default bar sits above it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CODE -->
+<section class="code" id="code">
+  <div class="wrap">
+    <h2 class="marker" style="font-size:clamp(30px,5vw,52px)">How I'd run it on real data</h2>
+    <p>Illustrative schema: one row per agent-proposed fix, with the human review outcome and whether the job stayed healthy for 24 hours after.</p>
+<pre><span class="c">-- 1. Clean-fix counts per category, last 12 weeks (illustrative tables)</span>
+<span class="k">CREATE OR REPLACE VIEW</span> ops_lab.fix_track_record <span class="k">AS</span>
+<span class="k">SELECT</span>
+  f.fix_category,
+  <span class="k">COUNT</span>(*)                                                     <span class="k">AS</span> reviewed,
+  <span class="k">COUNT_IF</span>(r.decision = 'approved' <span class="k">AND</span> h.healthy_24h)           <span class="k">AS</span> clean,
+  <span class="k">COUNT_IF</span>(f.touches_data_rows)                                  <span class="k">AS</span> data_touching
+<span class="k">FROM</span> ops_lab.agent_fixes f
+<span class="k">JOIN</span> ops_lab.fix_reviews   r <span class="k">USING</span> (fix_id)
+<span class="k">JOIN</span> ops_lab.job_health_24h h <span class="k">USING</span> (fix_id)
+<span class="k">WHERE</span> f.proposed_at &gt;= <span class="k">current_date</span>() - <span class="k">INTERVAL</span> 84 DAYS
+<span class="k">GROUP BY</span> f.fix_category;</pre>
+<pre><span class="c"># 2. Posterior gate per category (runs in a notebook or scheduled job)</span>
+<span class="k">import</span> numpy <span class="k">as</span> np
+rng = np.random.default_rng(<span class="k">20261114</span>)
+df  = spark.table(<span class="k">"ops_lab.fix_track_record"</span>).toPandas()
+
+BAR, CONF, STRENGTH = 0.97, 0.90, 60
+pooled = df.clean.sum() / df.reviewed.sum()
+a0, b0 = STRENGTH * pooled, STRENGTH * (1 - pooled)
+
+<span class="k">def</span> gate(row, m=4000):
+    draws = rng.beta(a0 + row.clean, b0 + row.reviewed - row.clean, m)
+    <span class="k">return</span> (draws &gt;= BAR).mean(), np.quantile(draws, [.05, .95])
+
+df[[<span class="k">"p_clear"</span>, <span class="k">"ci90"</span>]] = df.apply(gate, axis=1, result_type=<span class="k">"expand"</span>)
+df[<span class="k">"lane"</span>] = np.where((df.p_clear &gt;= CONF) &amp; (df.data_touching == 0),
+                      <span class="k">"earned"</span>, <span class="k">"review"</span>)
+spark.createDataFrame(df).write.mode(<span class="k">"overwrite"</span>).saveAsTable(<span class="k">"ops_lab.lane_status"</span>)</pre>
+    <p>I'd rerun the gate weekly, alert when a category's P(≥ bar) drops below the demotion line, and log every lane change to an audit table governed in the catalog.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><b>Unofficial concept prototype by Shriya Shekatkar. All data is simulated. Not affiliated with any company.</b></p>
+    <p>Part of <a href="https://shriyashekatkar25-byte.github.io/apm-lab/">APM Lab, the gallery</a> · product-decision prototypes built with Monte Carlo methods.</p>
+    <p class="credits">Design inspired by:
+      <a href="https://www.pinterest.com/pin/654710864623796967/" target="_blank" rel="noopener">“the sun will always rise again” (aanvi)</a> ·
+      <a href="https://www.pinterest.com/pin/579134833373374069/" target="_blank" rel="noopener">“treasure” crow sketch (fel)</a> ·
+      <a href="https://www.pinterest.com/pin/1072560467532173353/" target="_blank" rel="noopener">“the E in my name…” pink poster (awandemadlalaa)</a> ·
+      <a href="https://www.pinterest.com/pin/790944753356020726/" target="_blank" rel="noopener">“All negative energy sent in my direction…” green lettering (tarotreaderpeter)</a>.
+      All visuals redrawn in SVG/CSS/canvas; no pin images used.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+"use strict";
+const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---- hero rays: wavy golden filaments (SVG, drawn from scratch) ---- */
+(function rays(){
+  const svg = document.getElementById("rays"); const ns = "http://www.w3.org/2000/svg";
+  let r = mulberry32(7); let html = "";
+  for (let i=0;i<150;i++){
+    const ang = i/150*Math.PI*2 + (r()-0.5)*0.03;
+    const r0 = 150 + r()*40, r1 = 560 + r()*190, amp = 6 + r()*12, waves = 3 + Math.floor(r()*3);
+    let d = "";
+    for (let s=0;s<=24;s++){
+      const t = s/24, rad = r0 + (r1-r0)*t;
+      const off = Math.sin(t*Math.PI*waves + i)*amp*t;
+      const x = Math.cos(ang)*rad - Math.sin(ang)*off, y = Math.sin(ang)*rad + Math.cos(ang)*off;
+      d += (s?"L":"M")+x.toFixed(1)+" "+y.toFixed(1);
+    }
+    const c = ["#FFF1C7","#FFE08A","#F7C437","#E9A514"][i%4];
+    html += `<path d="${d}" fill="none" stroke="${c}" stroke-width="${(1+r()*2.4).toFixed(1)}" stroke-linecap="round" opacity="${(0.35+r()*0.5).toFixed(2)}"/>`;
+  }
+  html += `<circle r="170" fill="url(#core)"/><defs><radialGradient id="core"><stop offset="0" stop-color="#FFE48A" stop-opacity=".9"/><stop offset="1" stop-color="#F2B01E" stop-opacity="0"/></radialGradient></defs>`;
+  svg.innerHTML = html;
+})();
+
+/* ---- seeded RNG + samplers ---- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+function normal(r){ // Box-Muller
+  let u=0; while(u===0) u=r(); const v=r();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+function gamma(r,k){ // Marsaglia-Tsang (k>=1) with boost for k<1
+  if (k<1){ const u=r(); return gamma(r,k+1)*Math.pow(u,1/k); }
+  const d=k-1/3, c=1/Math.sqrt(9*d);
+  for(;;){ let x,v; do{ x=normal(r); v=1+c*x; }while(v<=0); v=v*v*v; const u=r();
+    if (u<1-0.0331*x*x*x*x) return d*v;
+    if (Math.log(u)<0.5*x*x+d*(1-v+Math.log(v))) return d*v; }
+}
+function beta(r,a,b){ const x=gamma(r,a), y=gamma(r,b); return x/(x+y); }
+
+/* ---- synthetic review log (12 weeks, human-reviewed fixes) ---- */
+const CATS = [
+  {name:"Retry after upstream blip", short:"retries",  clean:412, n:416, vol:52, color:"#39E11E"},
+  {name:"Schema drift: add nullable column", short:"schema-drift columns", clean:268, n:273, vol:31, color:"#E04FAE"},
+  {name:"Repoint renamed source", short:"source repoints", clean:126, n:134, vol:14, color:"#F2B01E"},
+  {name:"Code patch: type cast error", short:"type-cast patches", clean:81, n:93, vol:11, color:"#6B6B6B"},
+];
+const M = 4000, SAVE = 0.6, WEEKS_PER_MONTH = 4.33;
+const $ = id => document.getElementById(id);
+const S = {seed: 20261114, draws: [], res: null};
+
+function compute(){
+  const bar=+$("bar").value/100, conf=+$("conf").value/100, k0=+$("prior").value, frac=+$("hist").value/100, cost=+$("cost").value;
+  const r = mulberry32(S.seed);
+  const use = CATS.map(c=>({c, k:Math.round(c.clean*frac), n:Math.round(c.n*frac)}));
+  const pooled = use.reduce((s,u)=>s+u.k,0)/use.reduce((s,u)=>s+u.n,0);
+  const a0 = k0>0 ? k0*pooled : 1, b0 = k0>0 ? k0*(1-pooled) : 1;
+  const out = use.map(u=>{
+    const A=a0+u.k, B=b0+u.n-u.k, d=new Float64Array(M);
+    let hit=0; for(let m=0;m<M;m++){ d[m]=beta(r,A,B); if(d[m]>=bar) hit++; }
+    const s=Array.from(d).sort((x,y)=>x-y);
+    return {c:u.c, k:u.k, n:u.n, A, B, mean:A/(A+B), lo:s[Math.floor(.05*M)], hi:s[Math.floor(.95*M)], pClear:hit/M, draws:d, go: hit/M>=conf};
+  });
+  // net hours/week across graduated categories (per 100 workspaces), MC over joint posterior draws
+  let netSum=0, lossCount=0, badSum=0; const nets=new Float64Array(M);
+  for(let m=0;m<M;m++){
+    let net=0, bad=0;
+    out.forEach(o=>{ if(!o.go) return; const p=o.draws[m]; net += o.c.vol*(SAVE*p - cost*(1-p)); bad += o.c.vol*(1-p); });
+    nets[m]=net; netSum+=net; badSum+=bad; if(net<0) lossCount++;
+  }
+  const nGo=out.filter(o=>o.go).length;
+  S.res={bar,conf,k0,frac,cost,pooled,out,nGo,net:netSum/M,pLoss: nGo? lossCount/M : 0, badMonth: badSum/M*WEEKS_PER_MONTH, breakEven: cost/(cost+SAVE)};
+}
+
+/* ---- canvas ---- */
+const cv=$("cv"), ctx=cv.getContext("2d");
+let anim=null;
+function sizeCanvas(){
+  const w=cv.parentElement.clientWidth-16, dpr=window.devicePixelRatio||1;
+  const h=Math.max(300, Math.min(440, w*0.56));
+  cv.style.height=h+"px"; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0); cv._w=w; cv._h=h;
+}
+function draw(progress){
+  const R=S.res, W=cv._w, H=cv._h; if(!R) return;
+  ctx.clearRect(0,0,W,H); ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
+  const L = W<480 ? 22 : 150, Rr=14, T=26, B=34, lanes=R.out.length, lh=(H-T-B)/lanes;
+  const xmin=0.80, xmax=1.0, X=p=>L+(Math.max(xmin,Math.min(xmax,p))-xmin)/(xmax-xmin)*(W-L-Rr);
+  // axis
+  ctx.strokeStyle="#000"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(L,H-B+4); ctx.lineTo(W-Rr,H-B+4); ctx.stroke();
+  ctx.font="12px 'JetBrains Mono', monospace"; ctx.fillStyle="#222"; ctx.textAlign="center";
+  for(let t=0.80;t<=1.0001;t+=0.05){ const x=X(t); ctx.beginPath(); ctx.moveTo(x,H-B+4); ctx.lineTo(x,H-B+10); ctx.stroke(); ctx.fillText(Math.round(t*100)+"%",x,H-B+24); }
+  // break-even zone
+  const be=X(R.breakEven); ctx.fillStyle="rgba(200,51,143,.07)"; ctx.fillRect(L,T-10,be-L,H-T-B+14);
+  // lanes
+  const shown = Math.floor(M*progress), sr=mulberry32(99);
+  R.out.forEach((o,i)=>{
+    const y0=T+i*lh, cy=y0+lh/2;
+    ctx.strokeStyle="#000"; ctx.lineWidth=1; ctx.setLineDash([3,5]); ctx.beginPath(); ctx.moveTo(L,y0+lh); ctx.lineTo(W-Rr,y0+lh); ctx.stroke(); ctx.setLineDash([]);
+    if (W>=480){ ctx.textAlign="right"; ctx.fillStyle="#000"; ctx.font="bold 13px 'DM Sans', sans-serif"; wrapText(o.c.name, L-10, cy-4, L-16, 15); }
+    else { ctx.textAlign="left"; ctx.fillStyle="#000"; ctx.font="bold 12px 'DM Sans', sans-serif"; ctx.fillText(o.c.name, L+4, y0+13); }
+    ctx.fillStyle=o.c.color; ctx.globalAlpha=0.35;
+    const step = Math.max(1, Math.floor(M/900));
+    for(let m=0;m<shown;m+=step){ const p=o.draws[m]; const jy=(sr()-0.5)*(lh*0.55); ctx.beginPath(); ctx.arc(X(p), cy+jy+(W<480?6:0), 2.2, 0, 7); ctx.fill(); }
+    ctx.globalAlpha=1;
+    // credible interval bar
+    if(progress>=1){ ctx.strokeStyle="#000"; ctx.lineWidth=3; const yy=cy+lh*0.33; ctx.beginPath(); ctx.moveTo(X(o.lo),yy); ctx.lineTo(X(o.hi),yy); ctx.stroke();
+      ctx.fillStyle="#000"; ctx.beginPath(); ctx.arc(X(o.mean),yy,4.5,0,7); ctx.fill(); }
+  });
+  // bar line (marker style)
+  const bx=X(R.bar); ctx.strokeStyle="#000"; ctx.lineWidth=7; ctx.beginPath(); ctx.moveTo(bx,T-14); ctx.lineTo(bx,H-B+4); ctx.stroke();
+  ctx.strokeStyle="#39E11E"; ctx.lineWidth=4; ctx.stroke();
+  ctx.font="14px 'Permanent Marker', cursive"; ctx.textAlign= bx>W-90 ? "right":"left"; ctx.fillStyle="#000";
+  ctx.fillText("BAR "+(R.bar*100).toFixed(1)+"%", bx+(bx>W-90?-8:8), T-2);
+  ctx.font="11px 'JetBrains Mono', monospace"; ctx.textAlign="left"; ctx.fillStyle="#8A1F5F";
+  if (be-L>70) ctx.fillText("loses hours", L+4, H-B-4);
+}
+function wrapText(t,x,y,maxW,lh){
+  const words=t.split(" "); let line="", lines=[];
+  words.forEach(w=>{ const tst=line?line+" "+w:w; if(ctx.measureText(tst).width>maxW&&line){lines.push(line);line=w;} else line=tst; }); lines.push(line);
+  const y0=y-(lines.length-1)*lh/2; lines.forEach((l,i)=>ctx.fillText(l,x,y0+i*lh+4));
+}
+function animate(){
+  if(anim) cancelAnimationFrame(anim);
+  if(reduce){ draw(1); return; }
+  const t0=performance.now();
+  const f=now=>{ const p=Math.min(1,(now-t0)/900); draw(p); if(p<1) anim=requestAnimationFrame(f); };
+  anim=requestAnimationFrame(f);
+}
+
+/* ---- UI text ---- */
+const pct=(x,d=0)=>(x*100).toFixed(d)+"%";
+function render(){
+  const R=S.res;
+  $("barO").textContent=pct(R.bar,1); $("confO").textContent=pct(R.conf); $("priorO").textContent=R.k0?R.k0+" fixes":"flat";
+  $("histO").textContent=pct(R.frac); $("costO").textContent=R.cost+" h"; $("seedO").textContent=S.seed;
+  $("legend").innerHTML=R.out.map(o=>`<span><i style="background:${o.c.color}"></i>${o.c.short}</span>`).join("")+`<span>▬ 90% credible · ● mean</span>`;
+  $("tbl").querySelector("tbody").innerHTML=R.out.map(o=>`<tr><td>${o.c.name}</td><td>${o.k} / ${o.n}</td><td>${pct(o.mean,1)}</td><td>${pct(o.lo,1)}–${pct(o.hi,1)}</td><td>${pct(o.pClear,0)}</td><td><span class="tag ${o.go?"go":"wait"}">${o.go?"EARNED":"REVIEW"}</span></td></tr>`).join("");
+  const set=(id,v)=>{ const el=$(id); if(el.textContent!==v){ el.textContent=v; const k=el.parentElement; k.classList.remove("pop"); void k.offsetWidth; k.classList.add("pop"); } };
+  set("kv1", R.nGo+" / 4");
+  set("kv2", (R.net>=0?"+":"")+R.net.toFixed(1));
+  set("kv3", R.badMonth.toFixed(1));
+  set("kv4", R.nGo? pct(R.pLoss,0) : "—");
+  memo();
+}
+function memo(){
+  const R=S.res, go=R.out.filter(o=>o.go), wait=R.out.filter(o=>!o.go);
+  const names=a=>a.map(o=>o.c.short).join(", ").replace(/, ([^,]*)$/," and $1");
+  const nearest = wait.slice().sort((a,b)=>b.pClear-a.pClear)[0];
+  const barBelowBE = R.bar < R.breakEven;
+  if(go.length===0){
+    $("mDecision").textContent=`Hold. No fix category clears a ${pct(R.bar,1)} bar with ${pct(R.conf)} confidence, so every fix stays in human review.`;
+  } else {
+    $("mDecision").textContent=`Open the earned lane, opt-in, for ${go.length===1?"one category":go.length+" categories"}: ${names(go)}. ${wait.length?"Keep "+names(wait)+" in review.":"All four qualify, which makes me suspicious of the bar: tighten it before launch."}`;
+  }
+  $("mEvidence").textContent=R.out.map(o=>`${o.c.short}: ${o.k}/${o.n} clean, posterior mean ${pct(o.mean,1)}, ${pct(o.pClear)} chance it beats the bar`).join("; ")+`. Prior: ${R.k0?R.k0+" pseudo-fixes at the pooled "+pct(R.pooled,1)+" rate":"flat"}.`;
+  $("mRisks").textContent=(barBelowBE?`The bar (${pct(R.bar,1)}) is below break-even (${pct(R.breakEven,1)} at ${R.cost} h per bad fix), so even a correct graduation can lose hours. `:"")+
+    (go.length?`Expect about ${R.badMonth.toFixed(1)} bad auto-fixes a month per 100 workspaces; ${pct(R.pLoss)} of simulated worlds lose net hours. `:"")+
+    `Review history is biased: humans already filtered out the scary fixes, so prod success may be lower than the log. Data-row rewrites stay excluded no matter what.`;
+  $("mPlan").textContent=go.length?`Week 1–2: shadow mode (agent marks what it would have merged; humans still approve) to check the log against reality. Week 3–6: 5% of opted-in workspaces, ${names(go)} only, randomized against review-only control, measure time-to-recovery. Auto-demote any category whose P(≥ bar) drops under ${pct(Math.max(0.5,R.conf-0.15))}. Week 7+: expand if all guardrails hold.`
+    :`Keep collecting reviewed fixes. ${nearest?`${nearest.c.name} is closest (${pct(nearest.pClear)} vs ${pct(R.conf)} needed).`:""} Re-run the gate weekly.`;
+  $("mNext").textContent=go.length?`Write the admin-control spec with security (per-category toggles, audit log, one-click revert SLO), and get eng to instrument “healthy 24h after fix” as a first-class signal.`
+    :`Instrument “healthy 24h after fix” so the evidence accrues faster, and run shadow mode on ${nearest?nearest.c.short:"the top category"}.`;
+  $("mVP").textContent=go.length?`The data says ${names(go)} ${go.length===1?"has":"have"} earned a skip-the-queue lane, worth about ${Math.max(0,R.net).toFixed(0)} reviewer hours a week per 100 workspaces, and we'll prove it in shadow mode before a single fix merges itself.`
+    :`Nothing has earned autonomy yet at this bar, so we keep humans in the loop and let the review log keep building the case.`;
+}
+
+function run(){ compute(); render(); animate(); }
+["bar","conf","prior","hist","cost"].forEach(id=>$(id).addEventListener("input",run));
+$("run").addEventListener("click",()=>{ S.seed=(S.seed*7+13)%1000003; run(); });
+$("seed").addEventListener("click",()=>{ S.seed=Math.floor(Math.random()*1e6); run(); });
+let rt; window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(()=>{ sizeCanvas(); draw(1); },120); });
+sizeCanvas(); run();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(()=>draw(1));
+})();
+</script>
+</body>
+</html>
